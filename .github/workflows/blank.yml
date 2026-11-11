@@ -1,36 +1,57 @@
-# This is a basic workflow to help you get started with Actions
+name: Terraform Plan
 
-name: CI
-
-# Controls when the workflow will run
 on:
-  # Triggers the workflow on push or pull request events but only for the "main" branch
-  push:
-    branches: [ "main" ]
   pull_request:
-    branches: [ "main" ]
+    paths:
+      - "infra/**"
 
-  # Allows you to run this workflow manually from the Actions tab
-  workflow_dispatch:
-
-# A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
-  # This workflow contains a single job called "build"
-  build:
-    # The type of runner that the job will run on
+  terraform:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        env: [dev, prod]
+    defaults:
+      run:
+        working-directory: infra/envs/${{ matrix.env }}
+    env:
+      AWS_ACCESS_KEY_ID: dummy
+      AWS_SECRET_ACCESS_KEY: dummy
+      AWS_DEFAULT_REGION: ap-south-1
 
-    # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
-      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v4
 
-      # Runs a single command using the runners shell
-      - name: Run a one-line script
-        run: echo Hello, world!
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.7.5
 
-      # Runs a set of commands using the runners shell
-      - name: Run a multi-line script
+      - name: Terraform fmt
+        run: terraform fmt -check -recursive ../../
+
+      - name: Use local backend (plan-only, no AWS access)
         run: |
-          echo Add other actions to build,
-          echo test, and deploy your project.
+          printf 'terraform {\n  backend "local" {}\n}\n' > backend_override.tf
+
+      - name: Terraform init
+        run: terraform init -input=false
+
+      - name: Terraform validate
+        run: terraform validate
+
+      - name: Terraform plan
+        run: terraform plan -refresh=false -input=false -no-color -var-file=${{ matrix.env }}.tfvars | tee plan.txt
+
+      - name: Show plan in workflow summary
+        run: |
+          echo '### Terraform plan (${{ matrix.env }})' >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          tail -n 40 plan.txt >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload plan artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan-${{ matrix.env }}
+          path: infra/envs/${{ matrix.env }}/plan.txt
+EOF
