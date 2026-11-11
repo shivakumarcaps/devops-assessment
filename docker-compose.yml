@@ -1,7 +1,6 @@
 services:
   db:
     image: postgres:16
-    container_name: hotel_db
     environment:
       POSTGRES_USER: app
       POSTGRES_PASSWORD: app123

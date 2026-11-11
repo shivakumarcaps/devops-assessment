@@ -12,9 +12,15 @@ for e in dev prod; do
   D="$ROOT/infra/envs/$e"
   echo "=== $e ==="
   printf 'terraform {\n  backend "local" {}\n}\n' > "$D/backend_override.tf"
-  terraform -chdir="$D" init -reconfigure -input=false > /dev/null
-  terraform -chdir="$D" validate
-  terraform -chdir="$D" plan -refresh=false -input=false -var-file="$e.tfvars" | grep -E "^Plan:|Error"
+  terraform -chdir="$D" init -reconfigure -input=false -no-color > /dev/null
+  terraform -chdir="$D" validate -no-color
+  if ! OUT=$(terraform -chdir="$D" plan -refresh=false -input=false -no-color -var-file="$e.tfvars" 2>&1); then
+    echo "$OUT"
+    rm -f "$D/backend_override.tf"
+    exit 1
+  fi
+  echo "$OUT" | grep -E "^Plan:" || true
   rm -f "$D/backend_override.tf"
   rm -rf "$D/.terraform" "$D"/terraform.tfstate*
 done
+echo "All checks passed"
