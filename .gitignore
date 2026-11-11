@@ -2,3 +2,4 @@
 *.tfstate
 *.tfstate.*
 backups/
+backend_override.tf
